@@ -94,6 +94,7 @@ import {
   Legend,
 } from "recharts";
 import { jsPDF } from "jspdf";
+import { useAdminStatus } from "../features/admin";
 
 type SubView =
   | "main"
@@ -475,6 +476,7 @@ Your transaction is secured with ISO-27001 standard.
   // Online status (the personal-details form lives in features/profile/EditProfileForm)
   const [isOnline, setIsOnline] = useState(profile?.isOnline || false);
   const { toast, ToastHost } = useToast();
+  const { isAdmin } = useAdminStatus();
 
   // Accessible Language and Referral Program state
   const [selectedLang, setSelectedLang] = useState(
@@ -1243,6 +1245,16 @@ Your transaction is secured with ISO-27001 standard.
   };
 
   const menuItems = [
+    ...(isAdmin
+      ? [
+          {
+            icon: ShieldCheck,
+            label: "Admin Panel",
+            value: "open_admin",
+            color: "bg-slate-900 text-white",
+          },
+        ]
+      : []),
     {
       icon: RefreshCw,
       label: t("profile.title").includes("Profile")
@@ -1720,6 +1732,13 @@ Your transaction is secured with ISO-27001 standard.
               toast={toast}
               actions={menuItems}
               onOpen={(destination) => {
+                if (destination === "open_admin") {
+                  if (isAdmin) {
+                    window.dispatchEvent(new CustomEvent("open-admin-panel"));
+                  }
+                  return;
+                }
+
                 if (destination === "launch_tour") {
                   resetTourLocally(user?.uid || "guest_user");
                   window.dispatchEvent(new CustomEvent("launch-guided-tour"));
