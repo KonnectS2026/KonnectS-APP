@@ -82,15 +82,32 @@ service cloud.firestore {
                (!('featured' in data) || data.featured is bool) &&
                (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 100)) &&
                (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 2048 && data.photoURL.matches('https://.*'))) &&
-               (!('hasCompletedTour' in data) || data.hasCompletedTour is bool);
-      }
+               (!('hasCompletedTour' in data) || data.hasCompletedTour is bool) &&
+                (!('onboardingRole' in data) || data.onboardingRole in ['service_provider', 'community_member']) &&
+                (!('neighborhood' in data) || (
+                    data.neighborhood is map &&
+                    data.neighborhood.keys().hasAll(['name', 'radiusKm']) &&
+                    data.neighborhood.keys().hasOnly(['name', 'radiusKm']) &&
+                    data.neighborhood.name is string &&
+                    data.neighborhood.name.size() > 0 &&
+                    data.neighborhood.name.size() <= 100 &&
+                    data.neighborhood.radiusKm is number &&
+                    data.neighborhood.radiusKm >= 1 &&
+                    data.neighborhood.radiusKm <= 50
+                    )) &&
+                    (!('hasCompletedOnboarding' in data) ||
+                      data.hasCompletedOnboarding is bool) &&
+                    (!('hasCompletedOnboarding' in data) ||
+                      data.hasCompletedOnboarding == false ||
+                      data.keys().hasAll(['onboardingRole', 'neighborhood']));
+                      }
 
       allow read: if true;
       allow create: if isOwner(userId) && isValidUser(incoming()) && incoming().createdAt == request.time;
       allow update: if isOwner(userId) && (
         // Only allow updating non-critical fields
         incoming().diff(existing()).affectedKeys().hasOnly([
-          'username', 'firstName', 'lastName', 'fullName', 'mobileNumber', 'avatarUrl', 
+          'username', 'firstName', 'lastName', 'fullName', 'mobileNumber', 'avatarUrl',
           'workerType', 'isWorker', 'isOnline', 'updatedAt', 'savedItems',
           'verificationStatus', 'verificationStep', 'documents', 'hourlyRate',
           'isWorkerMode', 'autoAcceptConfig', 'rewardsPoints', 'referralCode',
@@ -99,9 +116,9 @@ service cloud.firestore {
           'availabilityStatus', 'appLanguage', 'rating', 'reviewCount', 'location',
           'priceDropNotificationsEnabled', 'quietHoursEnabled', 'quietHoursStart',
           'quietHoursEnd', 'accessibilityFontScale', 'accessibilityHighContrast',
-          'darkMode', 'isPremiumWorker', 'premiumExpiryDate', 'skills', 
+          'darkMode', 'isPremiumWorker', 'premiumExpiryDate', 'skills',
           'verificationPhoto', 'featured',
-          'displayName', 'photoURL', 'hasCompletedTour', 'email'
+          'displayName', 'photoURL', 'hasCompletedTour', 'email', 'onboardingRole', 'neighborhood', 'hasCompletedOnboarding'
         ]) &&
         // The profile email may only be set to the address the user is actually signed in with
         (
@@ -117,7 +134,7 @@ service cloud.firestore {
         incoming().createdAt == existing().createdAt &&
         incoming().uid == existing().uid &&
         // If updatedAt is changed, it must be the server time
-        (!incoming().diff(existing()).affectedKeys().hasAny(['updatedAt']) || 
+        (!incoming().diff(existing()).affectedKeys().hasAny(['updatedAt']) ||
          incoming().updatedAt == request.time)
       ) || isAdmin();
     }
@@ -179,7 +196,7 @@ service cloud.firestore {
 
       allow read: if isSignedIn() && (isOwner(resource.data.buyerId) || isOwner(resource.data.sellerId));
       allow create: if isSignedIn() && notBlocked() && incoming().buyerId == request.auth.uid && isValidOffer(incoming()) && incoming().createdAt == request.time;
-      allow update: if isSignedIn() && (isOwner(existing().sellerId) || isOwner(existing().buyerId)) && 
+      allow update: if isSignedIn() && (isOwner(existing().sellerId) || isOwner(existing().buyerId)) &&
                     incoming().diff(existing()).affectedKeys().hasOnly(['status']) &&
                     incoming().status in ['accepted', 'rejected'];
     }
@@ -216,17 +233,17 @@ service cloud.firestore {
       }
 
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && notBlocked() && incoming().customerId == request.auth.uid && 
+      allow create: if isSignedIn() && notBlocked() && incoming().customerId == request.auth.uid &&
                     isValidBooking(incoming()) && incoming().createdAt == request.time;
       allow update: if isSignedIn() && (
         // Customer actions
-        (isOwner(existing().customerId) && 
+        (isOwner(existing().customerId) &&
          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'description', 'updatedAt', 'suggestedPrice', 'createdAt'])) ||
         // Worker actions (accepting or countering)
-        (incoming().diff(existing()).affectedKeys().hasAny(['workerId', 'status', 'suggestedPrice', 'estimatedCompletionTime', 'updatedAt']) && 
+        (incoming().diff(existing()).affectedKeys().hasAny(['workerId', 'status', 'suggestedPrice', 'estimatedCompletionTime', 'updatedAt']) &&
          (incoming().status in ['accepted', 'negotiating'])) ||
         // Assigned worker actions
-        (existing().workerId != null && isOwner(existing().workerId) && 
+        (existing().workerId != null && isOwner(existing().workerId) &&
          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']))
       ) && isValidBooking(incoming()) && (incoming().createdAt == existing().createdAt || isOwner(existing().customerId));
     }
