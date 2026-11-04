@@ -15,6 +15,21 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    // An admin is someone flagged with the `admin` custom claim, OR listed in the `admins` collection.
+    // `admins` is edited by hand in the Firebase Console only: clients can never write to it.
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.admin == true ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // A moderator-blocked account cannot create new listings, offers or bookings.
+    function notBlocked() {
+      return !exists(/databases/$(database)/documents/users/$(request.auth.uid)) ||
+             !(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('moderationStatus', 'active') in ['temp_blocked', 'perm_blocked']);
+    }
+
     function isValidId(id) {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
@@ -104,7 +119,7 @@ service cloud.firestore {
         // If updatedAt is changed, it must be the server time
         (!incoming().diff(existing()).affectedKeys().hasAny(['updatedAt']) || 
          incoming().updatedAt == request.time)
-      );
+      ) || isAdmin();
     }
 
 
@@ -142,7 +157,7 @@ service cloud.firestore {
       }
 
       allow read: if true;
-      allow create: if isValidItem(incoming());
+      allow create: if isSignedIn() && notBlocked() && isValidItem(incoming());
       allow update: if isSignedIn() && (
         isOwner(existing().sellerId) ||
         incoming().diff(existing()).affectedKeys().hasAny(['status'])
@@ -163,7 +178,7 @@ service cloud.firestore {
       }
 
       allow read: if isSignedIn() && (isOwner(resource.data.buyerId) || isOwner(resource.data.sellerId));
-      allow create: if isSignedIn() && incoming().buyerId == request.auth.uid && isValidOffer(incoming()) && incoming().createdAt == request.time;
+      allow create: if isSignedIn() && notBlocked() && incoming().buyerId == request.auth.uid && isValidOffer(incoming()) && incoming().createdAt == request.time;
       allow update: if isSignedIn() && (isOwner(existing().sellerId) || isOwner(existing().buyerId)) && 
                     incoming().diff(existing()).affectedKeys().hasOnly(['status']) &&
                     incoming().status in ['accepted', 'rejected'];
@@ -201,7 +216,7 @@ service cloud.firestore {
       }
 
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && incoming().customerId == request.auth.uid && 
+      allow create: if isSignedIn() && notBlocked() && incoming().customerId == request.auth.uid && 
                     isValidBooking(incoming()) && incoming().createdAt == request.time;
       allow update: if isSignedIn() && (
         // Customer actions
@@ -259,7 +274,8 @@ service cloud.firestore {
     // 7. SOS Alerts Rules
     match /sos_alerts/{alertId} {
       allow create: if true;
-      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid);
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow update: if isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'resolvedBy', 'resolvedAt']);
     }
 
     // 8. Reviews Rules
@@ -317,17 +333,39 @@ service cloud.firestore {
 
     // 18. Feedback Rules
     match /feedback/{feedbackId} {
-      allow read, write: if isSignedIn();
+      allow create: if isSignedIn();
+      allow read: if isAdmin();
+      allow update: if isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'resolvedBy', 'updatedAt']);
+      allow delete: if false;
+    }
+
+    // ---------- Admin access list & audit trail ----------
+    // /admins/{uid} is created by hand in the Firebase Console. A signed-in user can only look up their own entry.
+    match /admins/{adminId} {
+      allow get: if isOwner(adminId);
+      allow list, write: if false;
+    }
+
+    // Every admin action is logged here. Admins can add entries (as themselves) and read them;
+    // nobody can edit or delete an entry, so the trail cannot be rewritten.
+    match /admin_audit/{entryId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() && incoming().adminUid == request.auth.uid && incoming().createdAt == request.time;
+      allow update, delete: if false;
     }
 
     // 19. Audit Logs Rules
     match /audit_logs/{logId} {
-      allow read, write: if isSignedIn();
+      allow create: if isSignedIn();
+      allow read: if isAdmin();
+      allow update, delete: if false;
     }
 
     // 20. Activity Logs Rules
     match /activity_logs/{logId} {
-      allow read, write: if isSignedIn();
+      allow create: if isSignedIn();
+      allow read: if isAdmin();
+      allow update, delete: if false;
     }
 
     // 21. Worker Experience Reels Rules

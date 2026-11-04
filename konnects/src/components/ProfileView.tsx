@@ -16,6 +16,7 @@ import { ServiceBooking, MarketplaceItem, WorkerType, UserProfile } from '../typ
 import { QuickSOS } from './QuickSOS';
 import { haptics } from '../utils/haptics';
 import { AvatarUploader, EditProfileForm, useToast } from '../features/profile';
+import { useAdminStatus } from '../features/admin';
 import { resetTourLocally } from '../utils/tourState';
 import { ExpenseInsight } from './ExpenseInsight';
 import { SettingsEditor } from './SettingsEditor';
@@ -305,6 +306,7 @@ Your transaction is secured with ISO-27001 standard.
   // Online status (the personal-details form lives in features/profile/EditProfileForm)
   const [isOnline, setIsOnline] = useState(profile?.isOnline || false);
   const { toast, ToastHost } = useToast();
+  const { isAdmin } = useAdminStatus();
 
   // Accessible Language and Referral Program state
   const [selectedLang, setSelectedLang] = useState(profile?.appLanguage || 'English (UK)');
@@ -885,6 +887,7 @@ Your transaction is secured with ISO-27001 standard.
   };
 
   const menuItems = [
+    ...(isAdmin ? [{ icon: ShieldCheck, label: 'Admin Panel', value: 'open_admin', color: 'bg-slate-900 text-white' }] : []),
     { icon: RefreshCw, label: t('profile.title').includes('Profile') ? 'Swap Activity Dashboard' : 'সোয়াপ অ্যাক্টিভিটি ড্যাশবোর্ড', value: 'swap_dashboard', color: 'bg-indigo-50 text-indigo-600' },
     { icon:Award, label: t('profile.title').includes('Profile') ? 'Rewards & Referrals' : 'পুরষ্কার এবং রেফারেল', value: 'rewards', color: 'bg-amber-50 text-amber-600' },
     { icon: Mic, label: t('profile.title').includes('Profile') ? 'Voice Activity Logs' : 'ভয়েস অ্যাক্টিভিটি লগ', value: 'voice_logs', color: 'bg-teal-50 text-teal-600' },
@@ -1468,6 +1471,10 @@ Your transaction is secured with ISO-27001 standard.
                    key={i}
                    whileTap={{ scale: 0.98 }}
                    onClick={() => {
+                     if (item.value === 'open_admin') {
+                       window.dispatchEvent(new CustomEvent('open-admin-panel'));
+                       return;
+                     }
                      if (item.value === 'launch_tour') {
                        // Forget "completed" in this browser, then open the tour right away
                        resetTourLocally(user?.uid || 'guest_user');
