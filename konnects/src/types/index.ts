@@ -24,6 +24,9 @@ export interface UserProfile {
   displayName?: string;
   /** True once the user has finished or skipped the guided tour (synced across devices) */
   hasCompletedTour?: boolean;
+  /** Set by admins: 'active' | 'warned' | 'temp_blocked' | 'perm_blocked' */
+  moderationStatus?: 'active' | 'warned' | 'temp_blocked' | 'perm_blocked';
+  moderationNotes?: string;
   mobileNumber?: string;
   bio?: string;
   isWorker: boolean;
