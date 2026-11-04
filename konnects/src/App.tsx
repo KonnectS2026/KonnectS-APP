@@ -27,6 +27,7 @@ import { Bell, AlertCircle, Check, Bug } from 'lucide-react';
 import { GuidedTour } from './components/GuidedTour';
 import { shouldAutoShowTour } from './utils/tourState';
 import { useProfileSelfHealing } from './features/profile';
+import { AccountBlockedScreen, AdminPanelHost, isBlockedStatus, useAdminStatus } from './features/admin';
 import { startRealtimeDbSync } from './services/dbSyncService';
 import { ReportIssueModal } from './components/ReportIssueModal';
 import { haptics } from './utils/haptics';
@@ -41,6 +42,7 @@ type Tab = 'home' | 'showcase' | 'marketplace' | 'services' | 'rides' | 'profile
 function AppContent() {
   const { user, profile, loading } = useAuth();
   useProfileSelfHealing();
+  const { isAdmin: isAdminUser } = useAdminStatus();
   const [activeTab, setActiveTabState] = useState<Tab>(() => {
     try {
       const saved = localStorage.getItem('user_default_home_tab') || localStorage.getItem('urbanNet_default_tab');
@@ -299,6 +301,11 @@ function AppContent() {
     return <LoginView />;
   }
 
+  // Suspended or banned accounts see a notice instead of the app (admins are never locked out of their own panel)
+  if (isBlockedStatus(profile?.moderationStatus) && !isAdminUser) {
+    return <AccountBlockedScreen status={profile?.moderationStatus} reason={profile?.moderationNotes} />;
+  }
+
   const renderView = () => {
     if (profile?.isWorkerMode && (activeTab === 'home' || activeTab === 'services')) {
       return <WorkerView onChat={(id, name) => setChattingWith({ id, name })} activeTab={activeTab} />;
@@ -337,6 +344,7 @@ function AppContent() {
       <DeveloperHUD />
       <ConflictResolutionModal />
       <MobileNumberGate />
+      <AdminPanelHost />
 
       {/* Floating Report Issue Trigger */}
       <div className="fixed right-6 bottom-40 z-45">
