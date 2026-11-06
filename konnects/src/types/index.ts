@@ -19,6 +19,25 @@ export interface UserProfile {
   dateOfBirth?: string;
   gender?: string;
   avatarUrl?: string;
+  /** Profile picture download URL (Firebase Storage: profile_pictures/{uid}) */
+  photoURL?: string;
+  displayName?: string;
+  /** True once the user has finished or skipped the guided tour (synced across devices) */
+  hasCompletedTour?: boolean;
+  /** User's chosen intent; does not grant provider verification. */
+onboardingRole?: 'service_provider' | 'community_member';
+
+/** Preferred neighborhood, separate from live GPS location. */
+neighborhood?: {
+  name: string;
+  radiusKm: number;
+};
+
+/** Set only after onboarding choices are successfully saved. */
+hasCompletedOnboarding?: boolean;
+  /** Set by admins: 'active' | 'warned' | 'temp_blocked' | 'perm_blocked' */
+  moderationStatus?: 'active' | 'warned' | 'temp_blocked' | 'perm_blocked';
+  moderationNotes?: string;
   mobileNumber?: string;
   bio?: string;
   isWorker: boolean;
