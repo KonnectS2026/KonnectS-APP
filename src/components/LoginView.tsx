@@ -6,10 +6,11 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
-import { LogIn, UserPlus, HelpCircle, ArrowLeft, Eye, EyeOff, Mail, Lock, User, Phone, Calendar, Heart, ShieldCheck, Apple, CheckCircle2, Fingerprint, ScanFace, FileText, Info, Compass } from 'lucide-react';
+import { LogIn, UserPlus, HelpCircle, ArrowLeft, Eye, EyeOff, Mail, Lock, User, Calendar, Heart, ShieldCheck, Apple, CheckCircle2, Fingerprint, ScanFace, FileText, Info, Compass } from 'lucide-react';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { resolveLoginIdentifier, lookupLoginIndex, mobileKey } from '../lib/loginIndex';
 import { db, firebaseConfig } from '../lib/firebase';
+import { PhoneVerification } from './PhoneVerification';
 import { haptics } from '../utils/haptics';
 
 type AuthMode = 'gateway' | 'login' | 'signup' | 'forgot' | 'forgot-success' | 'find-account' | 'results' | 'verify-account';
@@ -139,7 +140,11 @@ export function LoginView() {
       let msg = err.message || "Authentication failed. Please try again.";
       const code = err.code || '';
       
-      if (code.includes('auth/operation-not-allowed')) {
+      if (code.includes('auth/weak-password')) {
+        msg = "Password is too weak. Use at least 6 characters.";
+      } else if (code.includes('auth/network-request-failed')) {
+        msg = "Network error. Check your connection and try again.";
+      } else if (code.includes('auth/operation-not-allowed')) {
         msg = "SIGN-IN METHOD DISABLED: Email/Password login is not enabled. Go to the Firebase Console -> Authentication -> Sign-in method and enable 'Email/Password'.";
       } else if (code.includes('auth/email-already-in-use')) {
         msg = "This email is already registered. Try logging in instead.";
@@ -186,6 +191,14 @@ export function LoginView() {
       
       if (code.includes('auth/popup-closed-by-user') || code.includes('auth/cancelled-popup-request')) {
         setLoading(false);
+        return;
+      }
+      if (code.includes('auth/popup-blocked')) {
+        setError("Your browser blocked the Google sign-in pop-up. Allow pop-ups for this site and try again.");
+        return;
+      }
+      if (code.includes('auth/unauthorized-domain')) {
+        setError("This domain is not authorised for sign-in. Add it under Firebase Console > Authentication > Settings > Authorized domains.");
         return;
       }
       
@@ -464,7 +477,7 @@ export function LoginView() {
                 <button type="button" onClick={() => setMode('forgot')} className="text-[10px] font-black text-brand uppercase tracking-widest hover:underline">Forgot password?</button>
                 <div className="flex flex-col items-end space-y-1">
                   <button type="button" onClick={() => setMode('find-account')} className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:underline">Find account</button>
-                  <button type="button" onClick={() => setMode('verify-account')} className="text-[10px] font-black text-emerald-500 uppercase tracking-widest hover:underline">Verify Account</button>
+                  <button type="button" onClick={() => setMode('verify-account')} className="text-[10px] font-black text-emerald-500 uppercase tracking-widest hover:underline">Sign in with SMS</button>
                 </div>
               </div>
 
@@ -619,11 +632,8 @@ export function LoginView() {
                   <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input name="email" type="email" placeholder="Email Address" value={formData.email} onChange={handleChange} required className="w-full pl-11 pr-4 py-3 bg-slate-50 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand font-bold" />
                 </div>
-                <div className="relative">
-                  <Phone size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input name="mobileNumber" type="tel" placeholder="Mobile (e.g. +44...)" value={formData.mobileNumber} onChange={handleChange} required className="w-full pl-11 pr-4 py-3 bg-slate-50 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand font-bold" />
-                </div>
-                
+                {/* Mobile numbers are added and verified by SMS from Profile, so they cannot be spoofed at sign-up. */}
+
                 <div className="grid grid-cols-2 gap-3">
                   <div className="relative">
                     <Calendar size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -825,56 +835,14 @@ export function LoginView() {
                 <button type="button" onClick={() => setMode('login')} className="p-2 bg-slate-50 rounded-xl">
                   <ArrowLeft size={18} />
                 </button>
-                <h1 className="text-xl font-black tracking-tight">Verify Identity</h1>
+                <h1 className="text-xl font-black tracking-tight">Sign in with SMS</h1>
               </div>
 
               <div className="p-6 bg-emerald-50 rounded-3xl border border-emerald-100 space-y-4">
                 <p className="text-xs text-emerald-700 font-medium leading-relaxed italic">
-                  Complete this verification to secure your account. Enter your registered mobile and DOB.
+                  We'll text a 6-digit code to your mobile number (international format, e.g. +44...). Standard SMS rates may apply.
                 </p>
-                <div className="space-y-3">
-                  <div className="relative">
-                    <Phone size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-300" />
-                    <input 
-                      name="mobileNumber" 
-                      type="tel" 
-                      placeholder="Mobile Number" 
-                      value={formData.mobileNumber} 
-                      onChange={handleChange} 
-                      className="w-full pl-11 pr-4 py-4 bg-white rounded-xl text-xs outline-none font-bold shadow-sm focus:ring-2 focus:ring-emerald-500 transition-all text-emerald-900" 
-                    />
-                  </div>
-                  <div className="relative">
-                    <Calendar size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-300" />
-                    <input 
-                      name="dob" 
-                      type="date" 
-                      value={formData.dob} 
-                      onChange={handleChange} 
-                      className="w-full pl-11 pr-4 py-4 bg-white rounded-xl text-xs outline-none font-bold shadow-sm focus:ring-2 focus:ring-emerald-500 transition-all text-emerald-900" 
-                    />
-                  </div>
-                </div>
-                <button 
-                  onClick={async () => {
-                    setLoading(true);
-                    // Simulate verification check
-                    setTimeout(() => {
-                      setLoading(false);
-                      setMode('login');
-                      setError("Verification successful! You can now login.");
-                    }, 1500);
-                  }}
-                  disabled={loading || !formData.mobileNumber || !formData.dob}
-                  className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-emerald-500/20 active:scale-95 transition-all flex items-center justify-center space-x-2"
-                >
-                  {loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : (
-                    <>
-                      <ShieldCheck size={16} />
-                      <span>Verify & Return</span>
-                    </>
-                  )}
-                </button>
+                <PhoneVerification submitLabel="Verify & Sign In" />
               </div>
             </motion.div>
           )}
