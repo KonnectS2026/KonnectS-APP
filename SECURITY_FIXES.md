@@ -35,9 +35,11 @@ without being able to execute them (the emulator could not be downloaded in the 
 the real verification: a failing test means either the test or the rule needs a fix, so check which before changing either.
 
 ## Known limitations / follow-ups
-- Any signed-in user can still `get` another user's full profile document by uid (needed by chat/listings). The worker directory
-  now reads `/public_profiles` (safe fields only; trust fields must match the owner's real `/users` values, enforced by the rules),
-  but chat and listings should be moved onto it too. Existing workers appear in the directory after they next open the app.
+- `/users/{uid}` is now readable only by its owner and admins. Everyone else (worker directory, marketplace seller badges) reads
+  `/public_profiles/{uid}` (safe fields only; trust fields must match the owner's real `/users` values, enforced by the rules).
+  Every user now publishes a public profile (workers add skills/rate/bio/location). Existing users get one the next time they open the app.
+- `mobileNumber` can only be written when it equals the SMS-verified `phone_number` token claim, so it is added from Profile via
+  Firebase Phone Auth rather than typed in. Enable Phone sign-in (Blaze plan) and the authorised domains in the Firebase Console first.
 - `rewardsPoints` is bounded per update (+100) but is still client-written; move points/referrals/premium/payments to a trusted server.
 - Referral claims in ProfileView (+150 points, +£10 discount) now fail on purpose: they were client-granted rewards. Move them server-side.
 - Disputes are advisory only; no payment/refund backend exists in this repo.

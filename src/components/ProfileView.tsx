@@ -10,6 +10,8 @@ import { useLanguage, Language } from '../contexts/LanguageContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { collection, query, where, getDocs, orderBy, doc, updateDoc, arrayRemove, onSnapshot, serverTimestamp, addDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { PhoneVerification } from './PhoneVerification';
+
 import { ServiceBooking, MarketplaceItem, WorkerType } from '../types';
 import { QuickSOS } from './QuickSOS';
 import { haptics } from '../utils/haptics';
@@ -302,7 +304,6 @@ Your transaction is secured with ISO-27001 standard.
   const [editingName, setEditingName] = useState(profile?.username || '');
   const [firstName, setFirstName] = useState(profile?.firstName || '');
   const [lastName, setLastName] = useState(profile?.lastName || '');
-  const [mobileNumber, setMobileNumber] = useState(profile?.mobileNumber || '');
   const [hourlyRate, setHourlyRate] = useState(profile?.hourlyRate?.toString() || '');
   const [isOnline, setIsOnline] = useState(profile?.isOnline || false);
   const [editingWorkerType, setEditingWorkerType] = useState<WorkerType>(profile?.workerType || 'other');
@@ -674,7 +675,6 @@ Your transaction is secured with ISO-27001 standard.
         username: editingName,
         firstName,
         lastName,
-        mobileNumber,
         hourlyRate: Number(hourlyRate) || 0,
         workerType: editingWorkerType,
         updatedAt: serverTimestamp()
@@ -1537,12 +1537,17 @@ Your transaction is secured with ISO-27001 standard.
                    </div>
                    <div className="space-y-2">
                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Mobile Number</label>
-                      <input 
-                        value={mobileNumber}
-                        onChange={(e) => setMobileNumber(e.target.value)}
-                        placeholder="+44 7700 900XXX"
-                        className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-brand font-bold text-sm"
-                      />
+                      {profile?.mobileNumber ? (
+                        <div className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm flex items-center justify-between">
+                          <span>{profile.mobileNumber}</span>
+                          <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Verified</span>
+                        </div>
+                      ) : (
+                        <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 space-y-2">
+                          <p className="text-[11px] text-emerald-700 font-medium">Verify your mobile number by SMS to add it to your account.</p>
+                          <PhoneVerification submitLabel="Verify number" />
+                        </div>
+                      )}
                    </div>
                    {profile?.isWorker && (
                       <div className="space-y-4 pt-2 border-t border-slate-100">

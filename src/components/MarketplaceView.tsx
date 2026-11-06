@@ -484,7 +484,8 @@ export function MarketplaceView() {
       const newProfiles = { ...sellerProfiles };
       for (const id of uniqueSellerIds) {
         if (!newProfiles[id]) {
-          const uDoc = await getDoc(doc(db, 'users', id));
+          // Full /users profiles are private; sellers are shown from their safe public profile.
+          const uDoc = await getDoc(doc(db, 'public_profiles', id));
           if (uDoc.exists()) {
             newProfiles[id] = uDoc.data() as UserProfile;
           }

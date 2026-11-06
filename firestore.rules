@@ -39,11 +39,18 @@ service cloud.firestore {
 
     // ---------- 1. Users ----------
     match /users/{userId} {
+      // mobileNumber may only ever hold the phone number Firebase Auth has verified by SMS
+      // (the `phone_number` claim in the caller's ID token), or an empty string.
+      function verifiedPhone() {
+        return request.auth.token.get('phone_number', null);
+      }
+
       function isValidUser(data) {
         return data.keys().hasAll(['uid', 'email', 'username', 'createdAt']) &&
                data.uid == userId &&
                data.email is string && data.email.size() <= 256 &&
                data.username is string && data.username.size() <= 64 &&
+               (!('mobileNumber' in data) || data.mobileNumber is string) &&
                (!('firstName' in data) || data.firstName is string) &&
                (!('lastName' in data) || data.lastName is string) &&
                (!('fullName' in data) || data.fullName is string) &&
@@ -110,14 +117,15 @@ service cloud.firestore {
                 incoming().verificationStatus in ['unverified', 'pending', 'in_progress', 'rejected']);
       }
 
-      // Signed-in users can fetch a single profile by uid (needed for chat, listings
-      // and bookings) but cannot list/scan the collection. Admins can list.
-      allow get: if isSignedIn();
+      // A full profile (email, phone, DOB, documents) is private to its owner and admins.
+      // Other users see only the safe subset in /public_profiles/{uid}.
+      allow get: if isOwner(userId) || isAdmin();
       allow list: if isAdmin();
 
       allow create: if isOwner(userId) &&
                     isValidUser(incoming()) &&
                     isAllowedCreateKeys(incoming()) &&
+                    incoming().get('mobileNumber', '') in ['', verifiedPhone()] &&
                     incoming().createdAt == request.time &&
                     incoming().get('rewardsPoints', 0) <= 100;
 
@@ -136,6 +144,7 @@ service cloud.firestore {
           'darkMode', 'skills', 'verificationPhoto', 'loginCount',
           'workHistory', 'pastProjects', 'certifications', 'hasUploadedDocs'
         ]) &&
+        (!changed().hasAny(['mobileNumber']) || incoming().mobileNumber == verifiedPhone()) &&
         pointsChangeIsSafe() &&
         loginCountIsSafe() &&
         verificationIsSafe() &&
@@ -166,10 +175,10 @@ service cloud.firestore {
       allow delete: if isOwner(existing().uid);
     }
 
-    // ---------- 1.2 Public worker directory ----------
-    // Safe, shareable subset of a worker's profile (no email, phone, DOB or documents), so the directory
-    // never needs to list /users. Trust fields must equal the real values on the owner's own /users doc,
-    // so a worker can mirror them but never forge a rating or "verified" badge.
+    // ---------- 1.2 Public profiles ----------
+    // Safe, shareable subset of a profile (no email, phone, DOB or documents), so other users and the worker
+    // directory never need to read /users. Trust fields must equal the real values on the owner's own /users doc,
+    // so a user can mirror them but never forge a rating or "verified" badge.
     match /public_profiles/{userId} {
       function ownDoc() {
         return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
@@ -182,7 +191,7 @@ service cloud.firestore {
                ]) &&
                data.uid == request.auth.uid &&
                data.username is string && data.username.size() <= 64 &&
-               data.get('isWorker', false) == true &&
+               data.get('isWorker', false) == ownDoc().get('isWorker', false) &&
                data.get('rating', 0) == ownDoc().get('rating', 0) &&
                data.get('reviewCount', 0) == ownDoc().get('reviewCount', 0) &&
                data.get('verificationStatus', '') == ownDoc().get('verificationStatus', '') &&

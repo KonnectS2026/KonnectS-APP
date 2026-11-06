@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged, User, signInWithPopup, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, OAuthProvider, GoogleAuthProvider } from 'firebase/auth';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { onAuthStateChanged, User, signInWithPopup, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, sendEmailVerification, OAuthProvider, GoogleAuthProvider, RecaptchaVerifier, signInWithPhoneNumber, linkWithPhoneNumber, ConfirmationResult } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, increment, serverTimestamp, onSnapshot, query, collection, where, getDocs } from 'firebase/firestore';
 import { auth, db, googleProvider, handleFirestoreError, OperationType } from '../lib/firebase';
 import { UserProfile } from '../types';
@@ -235,6 +235,10 @@ interface AuthContextType {
   emailSignIn: (email: string, pass: string) => Promise<void>;
   emailSignUp: (data: Partial<UserProfile>, pass: string) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
+  sendVerificationEmail: () => Promise<void>;
+  /** Sends an SMS code. Links the number to the signed-in user, or signs in with it when signed out. */
+  sendPhoneCode: (phoneNumber: string, recaptchaContainerId: string) => Promise<void>;
+  confirmPhoneCode: (code: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -245,6 +249,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
+  const phoneConfirmationRef = useRef<ConfirmationResult | null>(null);
+  const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
+  const signingUpRef = useRef(false);
 
   // Sync profile details to Supabase upon any local update or change
   useEffect(() => {
@@ -274,7 +281,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           try {
             const docSnap = await getDoc(docRef);
             
-            if (!docSnap.exists()) {
+            if (!docSnap.exists() && !signingUpRef.current) {
               try {
                 // Demo personas only exist in development / when explicitly enabled.
                 const emailKey = (user.email || '').toLowerCase().trim();
@@ -293,7 +300,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   workerType: mockFields.workerType,
                   hourlyRate: mockFields.hourlyRate,
                   bio: mockFields.bio,
-                  mobileNumber: mockFields.mobileNumber || '',
+                  // Only a number verified by SMS may be stored (enforced by firestore.rules).
+                  mobileNumber: user.phoneNumber || '',
                   rewardsPoints: 100,
                   referralCode: Math.random().toString(36).substring(7).toUpperCase(),
                   carbonSavingsKg: 0,
@@ -533,6 +541,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const emailSignUp = async (data: Partial<UserProfile>, pass: string) => {
     if (!data.email) return;
+    // Stops onAuthStateChanged from auto-creating a bare profile (username from the email) before this one is written.
+    signingUpRef.current = true;
     try {
       const result = await createUserWithEmailAndPassword(auth, data.email, pass);
       const user = result.user;
@@ -547,7 +557,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         fullName: `${data.firstName || ''} ${data.lastName || ''}`.trim(),
         dateOfBirth: data.dateOfBirth || '',
         gender: data.gender || '',
-        mobileNumber: data.mobileNumber || '',
+        // mobileNumber is stored only after SMS verification (see confirmPhoneCode / firestore.rules).
         rewardsPoints: 0,
         carbonSavingsKg: 0,
         earnedBadges: [],
@@ -561,8 +571,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (firestoreError) {
         handleFirestoreError(firestoreError, OperationType.CREATE, `users/${user.uid}`);
       }
+      // Ask the user to confirm their email address (best effort; the account already exists).
+      sendEmailVerification(user).catch(err => console.warn('[AuthContext] Could not send verification email:', err));
     } catch (error) {
       throw error;
+    } finally {
+      signingUpRef.current = false;
     }
   };
 
@@ -571,6 +585,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await sendPasswordResetEmail(auth, email);
     } catch (error: any) {
       throw error;
+    }
+  };
+
+  const sendVerificationEmail = async () => {
+    if (!auth.currentUser) throw new Error('Sign in first.');
+    await sendEmailVerification(auth.currentUser);
+  };
+
+  const sendPhoneCode = async (phoneNumber: string, recaptchaContainerId: string) => {
+    const e164 = phoneNumber.replace(/[\s()-]/g, '');
+    if (!/^\+[1-9]\d{7,14}$/.test(e164)) {
+      throw Object.assign(new Error('Enter the number in international format, e.g. +447700900123.'), { code: 'auth/invalid-phone-number' });
+    }
+    recaptchaRef.current?.clear();
+    const verifier = new RecaptchaVerifier(auth, recaptchaContainerId, { size: 'invisible' });
+    recaptchaRef.current = verifier;
+    try {
+      const current = auth.currentUser;
+      phoneConfirmationRef.current = current && !current.phoneNumber
+        ? await linkWithPhoneNumber(current, e164, verifier)
+        : await signInWithPhoneNumber(auth, e164, verifier);
+    } catch (error) {
+      verifier.clear();
+      recaptchaRef.current = null;
+      throw error;
+    }
+  };
+
+  const confirmPhoneCode = async (code: string) => {
+    const confirmation = phoneConfirmationRef.current;
+    if (!confirmation) throw new Error('Request a code first.');
+    const result = await confirmation.confirm(code.trim());
+    phoneConfirmationRef.current = null;
+    recaptchaRef.current?.clear();
+    recaptchaRef.current = null;
+
+    // The rules only accept a mobileNumber equal to the verified phone_number token claim, so refresh the token first.
+    const verified = result.user;
+    if (!verified.phoneNumber) return;
+    try {
+      await verified.getIdToken(true);
+      await updateDoc(doc(db, 'users', verified.uid), { mobileNumber: verified.phoneNumber });
+      ensureLoginIndex({ uid: verified.uid, email: verified.email || '', username: profile?.username, mobileNumber: verified.phoneNumber });
+    } catch (err) {
+      // A brand-new phone user's profile is created with this number by onAuthStateChanged.
+      console.warn('[AuthContext] Could not save verified mobile number:', err);
     }
   };
 
@@ -635,7 +695,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, googleAccessToken, updateProfile, toggleWorkerMode, signIn, simulateOAuthSignIn, emailSignIn, emailSignUp, resetPassword, logout }}>
+    <AuthContext.Provider value={{ user, profile, loading, googleAccessToken, updateProfile, toggleWorkerMode, signIn, simulateOAuthSignIn, emailSignIn, emailSignUp, resetPassword, sendVerificationEmail, sendPhoneCode, confirmPhoneCode, logout }}>
       {children}
     </AuthContext.Provider>
   );

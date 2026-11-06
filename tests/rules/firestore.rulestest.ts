@@ -43,15 +43,32 @@ describe('users', () => {
     await assertFails(getDoc(doc(anon(), 'users', 'alice')));
   });
 
-  it('lets a signed-in user get one profile but not list the collection', async () => {
+  it('lets owners read their own profile but not other users', async () => {
     await seedUser('alice');
-    await assertSucceeds(getDoc(doc(as('bob'), 'users', 'alice')));
+    await assertSucceeds(getDoc(doc(as('alice'), 'users', 'alice')));
+    await assertFails(getDoc(doc(as('bob'), 'users', 'alice')));
     await assertFails(getDocs(collection(as('bob'), 'users')));
   });
 
-  it('lets an admin list users', async () => {
+  it('lets an admin read and list users', async () => {
     await seedUser('alice');
+    await assertSucceeds(getDoc(doc(as('root', { admin: true }), 'users', 'alice')));
     await assertSucceeds(getDocs(collection(as('root', { admin: true }), 'users')));
+  });
+
+  it('only accepts a mobile number that matches the SMS-verified phone claim', async () => {
+    await seedUser('alice');
+    const ref = doc(as('alice'), 'users', 'alice');
+    await assertFails(updateDoc(ref, { mobileNumber: '+447700900123' }));
+    const verified = doc(as('alice', { phone_number: '+447700900123' }), 'users', 'alice');
+    await assertSucceeds(updateDoc(verified, { mobileNumber: '+447700900123' }));
+    await assertFails(updateDoc(verified, { mobileNumber: '+447700900999' }));
+  });
+
+  it('allows creating a profile with the verified phone number only', async () => {
+    const base = { uid: 'alice', email: 'alice@example.com', username: 'alice', createdAt: serverTimestamp() };
+    await assertFails(setDoc(doc(as('alice'), 'users', 'alice'), { ...base, mobileNumber: '+447700900123' }));
+    await assertSucceeds(setDoc(doc(as('alice', { phone_number: '+447700900123' }), 'users', 'alice'), { ...base, mobileNumber: '+447700900123' }));
   });
 
   it('creates your own plain profile', async () => {
@@ -159,6 +176,20 @@ describe('public_profiles', () => {
     await assertSucceeds(setDoc(doc(as('alice'), 'public_profiles', 'alice'), {
       uid: 'alice', username: 'alice', isWorker: true, rating: 4.5, reviewCount: 3,
     }));
+  });
+
+  it('lets any user publish a public profile and any signed-in user read it', async () => {
+    await seedUser('alice');
+    await assertSucceeds(setDoc(doc(as('alice'), 'public_profiles', 'alice'), {
+      uid: 'alice', username: 'alice', isWorker: false, updatedAt: serverTimestamp(),
+    }));
+    await assertSucceeds(getDoc(doc(as('bob'), 'public_profiles', 'alice')));
+    await assertFails(getDoc(doc(anon(), 'public_profiles', 'alice')));
+  });
+
+  it('blocks a public profile that claims to be a worker when the real profile is not', async () => {
+    await seedUser('alice', { isWorker: false });
+    await assertFails(setDoc(doc(as('alice'), 'public_profiles', 'alice'), { uid: 'alice', username: 'alice', isWorker: true }));
   });
 
   it('only allows bounded directory queries', async () => {
