@@ -29,7 +29,7 @@ import {
   validateProfileForm,
   type ProfileFormValues,
 } from "./validation";
-import type { WorkerType } from "../../types";
+import type { ContactPreferences, WorkerType } from "../../types";
 
 interface EditProfileFormProps {
   toast: ToastApi;
@@ -107,9 +107,28 @@ export function EditProfileForm({ toast, onDone }: EditProfileFormProps) {
     String(originalNeighborhood.radiusKm),
   );
 
+  const [originalContactPreferences] = useState<ContactPreferences>(() => ({
+    preferredMethod: profile?.contactPreferences?.preferredMethod ?? "email",
+    serviceUpdates: profile?.contactPreferences?.serviceUpdates ?? true,
+    communityUpdates: profile?.contactPreferences?.communityUpdates ?? true,
+    productNews: profile?.contactPreferences?.productNews ?? false,
+  }));
+
+  const [contactPreferences, setContactPreferences] =
+    useState<ContactPreferences>(originalContactPreferences);
+
   const neighborhoodChanged =
     neighborhoodName.trim() !== originalNeighborhood.name.trim() ||
     Number(neighborhoodRadius) !== originalNeighborhood.radiusKm;
+
+  const contactPreferencesChanged =
+    contactPreferences.preferredMethod !==
+      originalContactPreferences.preferredMethod ||
+    contactPreferences.serviceUpdates !==
+      originalContactPreferences.serviceUpdates ||
+    contactPreferences.communityUpdates !==
+      originalContactPreferences.communityUpdates ||
+    contactPreferences.productNews !== originalContactPreferences.productNews;
 
   const neighborhoodNameError = neighborhoodChanged
     ? !neighborhoodName.trim()
@@ -210,7 +229,8 @@ export function EditProfileForm({ toast, onDone }: EditProfileFormProps) {
     emailChanged ||
     rateChanged ||
     typeChanged ||
-    neighborhoodChanged;
+    neighborhoodChanged ||
+    contactPreferencesChanged;
 
   const hasErrors =
     Object.keys(errors).length > 0 ||
@@ -273,6 +293,9 @@ export function EditProfileForm({ toast, onDone }: EditProfileFormProps) {
         };
       }
 
+      if (contactPreferencesChanged) {
+        updates.contactPreferences = contactPreferences;
+      }
       if (Object.keys(updates).length > 0) {
         await setDoc(
           doc(db, "users", user.uid),
@@ -660,6 +683,123 @@ export function EditProfileForm({ toast, onDone }: EditProfileFormProps) {
                   <FieldError msg={neighborhoodRadiusError} />
                 </div>
               </div>
+            </div>
+          </div>
+          <div className="space-y-5 border-t border-slate-200 pt-6 dark:border-slate-700">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                Contact preferences
+              </h3>
+
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                Choose how KonnectS should contact you and which optional
+                updates you want to receive.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="ep-preferred-contact" className={LABEL}>
+                Preferred contact method
+              </label>
+
+              <select
+                id="ep-preferred-contact"
+                value={contactPreferences.preferredMethod}
+                onChange={(event) =>
+                  setContactPreferences((current) => ({
+                    ...current,
+                    preferredMethod: event.target
+                      .value as ContactPreferences["preferredMethod"],
+                  }))
+                }
+                className={`${INPUT} appearance-none`}
+              >
+                <option value="email">Email</option>
+                <option value="sms">SMS</option>
+                <option value="both">Email and SMS</option>
+              </select>
+
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                Important security and account messages may still be sent when
+                required.
+              </p>
+            </div>
+
+            <div className="grid gap-3">
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-4 transition hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
+                <input
+                  type="checkbox"
+                  checked={contactPreferences.serviceUpdates}
+                  onChange={(event) =>
+                    setContactPreferences((current) => ({
+                      ...current,
+                      serviceUpdates: event.target.checked,
+                    }))
+                  }
+                  className="mt-1 h-4 w-4 shrink-0 accent-indigo-600"
+                />
+
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-slate-900 dark:text-white">
+                    Service and booking updates
+                  </span>
+
+                  <span className="mt-1 block text-sm text-slate-600 dark:text-slate-300">
+                    Receive updates about bookings, rides, providers, and
+                    marketplace activity.
+                  </span>
+                </span>
+              </label>
+
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-4 transition hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
+                <input
+                  type="checkbox"
+                  checked={contactPreferences.communityUpdates}
+                  onChange={(event) =>
+                    setContactPreferences((current) => ({
+                      ...current,
+                      communityUpdates: event.target.checked,
+                    }))
+                  }
+                  className="mt-1 h-4 w-4 shrink-0 accent-indigo-600"
+                />
+
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-slate-900 dark:text-white">
+                    Community activity
+                  </span>
+
+                  <span className="mt-1 block text-sm text-slate-600 dark:text-slate-300">
+                    Receive neighborhood news, community replies, and local
+                    activity updates.
+                  </span>
+                </span>
+              </label>
+
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-4 transition hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
+                <input
+                  type="checkbox"
+                  checked={contactPreferences.productNews}
+                  onChange={(event) =>
+                    setContactPreferences((current) => ({
+                      ...current,
+                      productNews: event.target.checked,
+                    }))
+                  }
+                  className="mt-1 h-4 w-4 shrink-0 accent-indigo-600"
+                />
+
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-slate-900 dark:text-white">
+                    Product news and offers
+                  </span>
+
+                  <span className="mt-1 block text-sm text-slate-600 dark:text-slate-300">
+                    Receive optional feature announcements, promotions, and
+                    offers.
+                  </span>
+                </span>
+              </label>
             </div>
           </div>
         </fieldset>

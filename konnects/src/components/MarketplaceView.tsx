@@ -2041,7 +2041,7 @@ export function MarketplaceView() {
         )}
       </AnimatePresence>
 
-      <div className="mt-12 p-8 bg-brand/5 rounded-[50px] border border-brand/10 flex items-center space-x-6 relative overflow-hidden group">
+      {/* <div className="mt-12 p-8 bg-brand/5 rounded-[50px] border border-brand/10 flex items-center space-x-6 relative overflow-hidden group">
         <div className="absolute -right-6 -bottom-6 w-32 h-32 bg-brand/5 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-700"></div>
         <div className="w-16 h-16 bg-brand/10 rounded-2xl flex items-center justify-center flex-shrink-0 text-brand shadow-inner">
           <Tag size={28} />
@@ -2055,7 +2055,7 @@ export function MarketplaceView() {
              Share Refer Code
           </button>
         </div>
-      </div>
+      </div> */}
 
       {/* Checkout Success Modal overlay */}
       <AnimatePresence>

@@ -65,6 +65,25 @@ service cloud.firestore {
                (!('invitedBy' in data) || data.invitedBy is string) &&
                (!('availabilityStatus' in data) || data.availabilityStatus is string) &&
                (!('appLanguage' in data) || data.appLanguage is string) &&
+               (!('contactPreferences' in data) || (
+  data.contactPreferences is map &&
+  data.contactPreferences.keys().hasAll([
+    'preferredMethod',
+    'serviceUpdates',
+    'communityUpdates',
+    'productNews'
+  ]) &&
+  data.contactPreferences.keys().hasOnly([
+    'preferredMethod',
+    'serviceUpdates',
+    'communityUpdates',
+    'productNews'
+  ]) &&
+  data.contactPreferences.preferredMethod in ['email', 'sms', 'both'] &&
+  data.contactPreferences.serviceUpdates is bool &&
+  data.contactPreferences.communityUpdates is bool &&
+  data.contactPreferences.productNews is bool
+)) &&
                (!('rating' in data) || data.rating is number) &&
                (!('reviewCount' in data) || data.reviewCount is number) &&
                (!('location' in data) || data.location is map) &&
@@ -113,7 +132,7 @@ service cloud.firestore {
           'isWorkerMode', 'autoAcceptConfig', 'rewardsPoints', 'referralCode',
           'dateOfBirth', 'gender', 'bio', 'carbonSavingsKg', 'savedAddresses',
           'discountBalance', 'referredUsersCount', 'earnedBadges', 'invitedBy',
-          'availabilityStatus', 'appLanguage', 'rating', 'reviewCount', 'location',
+          'availabilityStatus', 'appLanguage', 'contactPreferences', 'rating', 'reviewCount', 'location',
           'priceDropNotificationsEnabled', 'quietHoursEnabled', 'quietHoursStart',
           'quietHoursEnd', 'accessibilityFontScale', 'accessibilityHighContrast',
           'darkMode', 'isPremiumWorker', 'premiumExpiryDate', 'skills',
