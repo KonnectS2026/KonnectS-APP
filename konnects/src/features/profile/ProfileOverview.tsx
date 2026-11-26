@@ -30,7 +30,16 @@ interface ProfileOverviewProps {
   onOpen: (view: string) => void;
   onLogout: () => void | Promise<void>;
   accountControls: ReactNode;
+  identityControls: ReactNode;
 }
+
+const BADGE_LEVELS = [
+  { name: "Explorer", minimumBadges: 0 },
+  { name: "Community Helper", minimumBadges: 1 },
+  { name: "Community Builder", minimumBadges: 3 },
+  { name: "Local Champion", minimumBadges: 6 },
+  { name: "Neighborhood Hero", minimumBadges: 10 },
+] as const;
 
 const panel =
   "min-w-0 rounded-2xl border border-slate-200 bg-white shadow-sm " +
@@ -74,6 +83,7 @@ export function ProfileOverview({
   actions,
   onOpen,
   onLogout,
+  identityControls,
   accountControls,
 }: ProfileOverviewProps) {
   const [loggingOut, setLoggingOut] = useState(false);
@@ -124,6 +134,28 @@ export function ProfileOverview({
     ? Math.max(0, profile.rewardsPoints)
     : 0;
   const badges = [...new Set(profile.earnedBadges || [])];
+
+  const badgeLevelIndex = BADGE_LEVELS.reduce(
+    (currentIndex, level, index) =>
+      badges.length >= level.minimumBadges ? index : currentIndex,
+    0,
+  );
+
+  const currentBadgeLevel = BADGE_LEVELS[badgeLevelIndex];
+  const nextBadgeLevel = BADGE_LEVELS[badgeLevelIndex + 1];
+
+  const badgesInCurrentLevel = badges.length - currentBadgeLevel.minimumBadges;
+
+  const badgesRequiredForNextLevel = nextBadgeLevel
+    ? nextBadgeLevel.minimumBadges - currentBadgeLevel.minimumBadges
+    : 0;
+
+  const badgeLevelProgress = nextBadgeLevel
+    ? Math.min(
+        100,
+        Math.round((badgesInCurrentLevel / badgesRequiredForNextLevel) * 100),
+      )
+    : 100;
 
   const details = [
     Boolean(profile.firstName || profile.fullName || profile.displayName),
@@ -208,10 +240,19 @@ export function ProfileOverview({
                 />
               </div>
 
-              <h2 className="mt-4 break-words text-xl font-bold">{name}</h2>
-              <p className="mt-1 break-all text-sm text-slate-600 dark:text-slate-400">
-                @{profile.username}
-              </p>
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <h2 className="break-words text-xl font-bold">{name}</h2>
+
+                  <p className="mt-1 break-all text-sm text-slate-600 dark:text-slate-400">
+                    @{profile.username}
+                  </p>
+                </div>
+
+                <div className="w-full shrink-0 sm:w-auto">
+                  {identityControls}
+                </div>
+              </div>
 
               <span className="mt-4 inline-flex rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
                 {role}
@@ -362,7 +403,7 @@ export function ProfileOverview({
             </div>
           </section>
 
-          <div className="grid items-start gap-6 xl:grid-cols-2">
+          <div className="grid gap-6 xl:grid-cols-2">
             <section className={`${panel} p-5 sm:p-6`}>
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400">
                 {verified ? (
@@ -411,12 +452,54 @@ export function ProfileOverview({
             </section>
           </div>
 
+          {false && (
           <section className={`${panel} p-5 sm:p-6`}>
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-lg font-semibold">Earned badges</h2>
               <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold dark:bg-slate-800">
                 {badges.length} earned
               </span>
+            </div>
+
+            <div className="mt-5 rounded-xl bg-indigo-50 p-4 dark:bg-indigo-950/60">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-300">
+                    Badge level
+                  </p>
+
+                  <p className="mt-1 text-base font-bold text-slate-900 dark:text-white">
+                    {currentBadgeLevel.name}
+                  </p>
+                </div>
+
+                {nextBadgeLevel ? (
+                  <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                    {nextBadgeLevel.minimumBadges - badges.length} more{" "}
+                    {nextBadgeLevel.minimumBadges - badges.length === 1
+                      ? "badge"
+                      : "badges"}{" "}
+                    to {nextBadgeLevel.name}
+                  </p>
+                ) : (
+                  <p className="text-sm font-semibold text-indigo-700 dark:text-indigo-300">
+                    Highest level reached
+                  </p>
+                )}
+              </div>
+
+              <progress
+                value={badgeLevelProgress}
+                max={100}
+                aria-label={`Progress toward ${
+                  nextBadgeLevel?.name ?? currentBadgeLevel.name
+                }`}
+                className="mt-4 h-2 w-full overflow-hidden rounded-full accent-indigo-600"
+              />
+
+              <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">
+                {badges.length} total {badges.length === 1 ? "badge" : "badges"}
+              </p>
             </div>
 
             {badges.length ? (
@@ -445,6 +528,7 @@ export function ProfileOverview({
               </div>
             )}
           </section>
+          )}
 
           <section className={`${panel} p-5 sm:p-6`}>
             <h2 className="text-lg font-semibold">More account tools</h2>

@@ -9,6 +9,14 @@ export type ItemStatus = 'available' | 'sold' | 'deleted' | 'pending_pickup' | '
 export type ItemCondition = 'new' | 'used_good' | 'used_fair' | 'parts';
 export type ServiceStatus = 'requested' | 'accepted' | 'completed' | 'cancelled';
 
+
+export interface ContactPreferences {
+  preferredMethod: "email" | "sms" | "both";
+  serviceUpdates: boolean;
+  communityUpdates: boolean;
+  productNews: boolean;
+}
+
 export interface UserProfile {
   uid: string;
   email: string;
@@ -39,6 +47,7 @@ hasCompletedOnboarding?: boolean;
   moderationStatus?: 'active' | 'warned' | 'temp_blocked' | 'perm_blocked';
   moderationNotes?: string;
   mobileNumber?: string;
+  contactPreferences?: ContactPreferences;
   bio?: string;
   isWorker: boolean;
   isWorkerMode?: boolean; 

@@ -447,6 +447,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             carbonSavingsKg: 0,
             earnedBadges: [],
             loginCount: 1,
+            hasCompletedOnboarding: false,
             createdAt: serverTimestamp(),
           };
           await setDoc(docRef, newProfile);
@@ -600,6 +601,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           earnedBadges: [],
           referralCode: Math.random().toString(36).substring(7).toUpperCase(),
           isWorker: false,
+          hasCompletedOnboarding: false,
           createdAt: serverTimestamp(),
         };
         try {
