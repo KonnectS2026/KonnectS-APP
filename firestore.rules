@@ -543,5 +543,65 @@ service cloud.firestore {
     match /admin/{docId} {
       allow read, write: if isAdmin();
     }
+
+    // ===== Support Portal (support-portal/) — additive; overlapping matches are OR'd =====
+
+    function isAgent() { return isSignedIn() && exists(/databases/$(database)/documents/support_agents/$(request.auth.uid)); }
+    function isSupport() { return isAgent() || isAdmin(); }
+    // The same batch must also create a support_audit_logs doc written by THIS agent.
+    function audited(logId) {
+      return logId is string &&
+        getAfter(/databases/$(database)/documents/support_audit_logs/$(logId)).data.agentId == request.auth.uid;
+    }
+
+    match /support_agents/{id} { allow get: if isOwner(id); allow list, write: if false; } // managed in Console
+
+    match /support_audit_logs/{id} {
+      allow create: if isSupport() && incoming().agentId == request.auth.uid && incoming().timestamp == request.time &&
+        incoming().keys().hasOnly(['agentId', 'targetUserId', 'actionTaken', 'reason', 'timestamp']) &&
+        incoming().reason is string && incoming().reason.size() > 0 && incoming().reason.size() <= 1000;
+      allow read: if isAdmin();               // Super Admin only
+      allow update, delete: if false;         // immutable
+    }
+
+    match /users/{userId} {
+      allow get, list: if isSupport();        // NOTE: exposes full profiles (email, phone, documents) to staff
+      allow update: if isSupport() && audited(incoming().get('lastSupportAuditId', null)) && (
+        (changed().hasOnly(['verificationStatus', 'verificationNote', 'verifiedBy', 'verifiedAt', 'lastSupportAuditId', 'updatedAt']) &&
+          incoming().verificationStatus in ['verified', 'rejected', 'pending']) ||
+        changed().hasOnly(['fullName', 'username', 'firstName', 'lastName', 'workerType', 'bio', 'lastSupportAuditId', 'updatedAt']) ||
+        (isAdmin() && changed().hasOnly(['moderationStatus', 'lastSupportAuditId', 'updatedAt']) &&
+          incoming().moderationStatus in ['active', 'temp_blocked', 'perm_blocked']));
+    }
+
+    match /user_warnings/{id} {
+      allow create: if isSupport() && incoming().agentId == request.auth.uid && audited(incoming().get('auditId', null));
+      allow read: if isSupport() || isOwner(resource.data.userId);
+    }
+
+    match /support_tickets/{id} {
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid && incoming().status == 'Open' &&
+        incoming().kind in ['bug', 'scam', 'dispute'] && incoming().createdAt == request.time;
+      allow read: if isSupport() || isOwner(resource.data.userId);
+      allow update: if isSupport() && changed().hasOnly(['status', 'assignedTo', 'updatedAt', 'lastSupportAuditId']) &&
+        incoming().status in ['Open', 'In Progress', 'Resolved', 'Closed'] && audited(incoming().get('lastSupportAuditId', null));
+      match /replies/{rid} {
+        function ownerUid() { return get(/databases/$(database)/documents/support_tickets/$(id)).data.userId; }
+        allow read: if isSupport() || isOwner(ownerUid());
+        allow create: if (isSupport() && incoming().authorRole == 'support' && incoming().authorId == request.auth.uid && audited(incoming().get('auditId', null))) ||
+                         (isOwner(ownerUid()) && incoming().authorRole == 'user' && incoming().authorId == request.auth.uid);
+      }
+    }
+
+    match /items/{itemId} {   // agents may hide/restore a listing, nothing else
+      allow update: if isSupport() && changed().hasOnly(['status', 'previousStatus', 'moderatedBy', 'moderationReason', 'updatedAt', 'lastSupportAuditId']) &&
+        incoming().status in ['hidden', 'available'] && audited(incoming().get('lastSupportAuditId', null));
+    }
+
+    match /sos_alerts/{alertId} {
+      allow read: if isSupport();
+      allow update: if isSupport() && changed().hasOnly(['status', 'resolvedBy', 'resolvedAt', 'lastSupportAuditId']) &&
+        incoming().status == 'resolved' && audited(incoming().get('lastSupportAuditId', null));
+    }
   }
 }
